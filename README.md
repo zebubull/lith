@@ -21,7 +21,6 @@ as the input file. In some cases, there may be a large extraneous chunk of trian
 If this happens, then increase the width by 1 unit, regenerate, and it will (probably) be fixed.
 
 ### Slicing
-lith generates a **flat**, **unclosed** mesh. It is up to the slicer to actually finish producing the model ~~because I was too lazy to implement it~~.
-Ultimaker Cura is tested and works (relatively) well. The behaviour of other slicers is unknown. Note that whatever slicer you use will likely display
-multiple errors and heavily complain about a possibly corrupt file. This is not indicative of a bad mesh, although it should be noted that it is
-also not indicative of a good mesh (I do not have a lot of faith that this program works reliably).
+Ultimaker Cura has been tested and will play nice with generated files. There is no reason any other slicer shouldn't work, but don't be surprised
+if they complain. If you don't want to print the brim, then move the mesh down 1 layer height in your slicer. Note that this may remove non-brim material
+if your source image has some very bright parts (This method has once again only been tested in Ultimaker Cura so it may not work for other slicers).
