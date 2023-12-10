@@ -1,11 +1,12 @@
-use clap::Parser;
-use color_eyre::eyre::{Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, Report};
 use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage, ImageBuffer};
 use std::{
     fs::OpenOptions,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
+
+use eframe::egui;
 
 #[derive(Default, Clone)]
 struct Vertex {
@@ -164,24 +165,17 @@ impl Mesh {
     }
 }
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(short, long)]
-    input: String,
-    #[arg(short, long)]
+struct Args<'a> {
+    input: &'a Path,
     scaling: f32,
-    #[arg(short, long)]
     width: u32,
 }
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let args = Args::parse();
+fn do_lith(args: Args) -> Result<()> {
     let img = ImageReader::open(&args.input)
-        .wrap_err_with(|| format!("failed to find file '{}'", args.input))?
+        .wrap_err_with(|| format!("failed to find file '{}'", args.input.display()))?
         .decode()
-        .wrap_err_with(|| format!("failed to decode image '{}'", args.input))?;
+        .wrap_err_with(|| format!("failed to decode image '{}'", args.input.display()))?;
 
     let new_height = (img.height() as f32 * args.width as f32 / img.width() as f32).ceil() as u32;
     let img = img.resize(args.width, new_height, FilterType::CatmullRom);
@@ -204,5 +198,78 @@ fn main() -> Result<()> {
         PathBuf::from(args.input).with_extension("stl"),
     ))?;
 
+    Ok(())
+}
+
+#[derive(Default)]
+struct App {
+    path: Option<PathBuf>,
+    scaling: f32,
+    width: u32,
+    err: Option<Report>,
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Select image...").clicked() {
+                    self.path = rfd::FileDialog::new().pick_file();
+                }
+
+                match &self.path {
+                    Some(path) => ui.label(path.display().to_string()),
+                    None => ui.label("No image selected"),
+                };
+            });
+            
+            ui.horizontal(|ui| {
+                ui.label("Scaling");
+                ui.add(egui::Slider::new(&mut self.scaling, -1.0..=1.0))
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Width");
+                ui.add(egui::Slider::new(&mut self.width, 0..=480))
+            });
+
+            if ui.button("Generate Lithophane").clicked() && self.path.is_some() {
+                let p = self.path.as_ref().unwrap();
+                let r = do_lith(Args {
+                    input: p,
+                    scaling: self.scaling,
+                    width: self.width,
+                });
+                self.err = match r {
+                    Ok(()) => None,
+                    Err(r) => {
+                        println!("{:?}", r);
+                        Some(r)
+                    },
+                };
+            }
+
+            if let Some(_) = self.err {
+                ui.label("ERROR: Please check console for details");
+            }
+        });
+    }
+}
+
+fn main() -> Result<()> {
+    color_eyre::install()?;
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 600.0]),
+        ..Default::default()
+    };
+
+    let _ = eframe::run_native(
+        "Lithophane Generator",
+        options,
+        Box::new(|c| {
+            egui_extras::install_image_loaders(&c.egui_ctx);
+            Box::<App>::default()
+    }));
     Ok(())
 }

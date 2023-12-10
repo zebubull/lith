@@ -8,4 +8,9 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.4.11", features = ["derive"] }
 color-eyre = "0.6.2"
+eframe = "0.24.1"
+egui = "0.24.1"
+egui_extras = { version = "0.24.2", features = ["image"] }
+epi = "0.17.0"
 image = "0.24.7"
+rfd = "0.12.1"
