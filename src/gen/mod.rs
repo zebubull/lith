@@ -2,9 +2,11 @@ use image::DynamicImage;
 
 use crate::geo::Mesh;
 
+/// Cylindrical lithophane generator
+pub mod cylinder_mesh;
 /// Flat image lithophane generator
 pub mod flat_mesh;
-/// Standard image preprocessor;
+/// Standard image preprocessor
 pub mod standard_image;
 
 pub trait LithophaneGenerator {

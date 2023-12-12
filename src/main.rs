@@ -3,7 +3,7 @@ use egui::{ColorImage, TextureHandle, Ui, Vec2};
 use image::{io::Reader as ImageReader, DynamicImage};
 use lith::gen::{
     flat_mesh::FlatMeshGenerator, standard_image::StandardImagePreprocessor, ImagePreprocessor,
-    LithophaneGenerator,
+    LithophaneGenerator, cylinder_mesh::CylinderMeshGenerator,
 };
 use std::{path::PathBuf, fmt::Display};
 
@@ -41,6 +41,9 @@ impl App {
         let mesh = match self.generator {
             Generator::FlatMesh(scaling) => {
                 FlatMeshGenerator::default().scaling(scaling).generate(map)
+            }
+            Generator::Cylinder(scaling, radius, height) => {
+                CylinderMeshGenerator::default().scaling(scaling).radius(radius).height(height).generate(map)
             }
         };
 
@@ -87,12 +90,14 @@ impl Display for Processor {
 
 enum Generator {
     FlatMesh(f32),
+    Cylinder(f32, f32, f32),
 }
 
 impl Display for Generator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", match self {
-            Generator::FlatMesh(_) => "Flat Mesh"
+            Generator::FlatMesh(_) => "Flat Mesh",
+            Generator::Cylinder(_, _, _) => "Cylindrical",
         })
     }
 }
@@ -145,6 +150,10 @@ impl eframe::App for App {
                     self.generator = Generator::FlatMesh(2.0);
                     ui.close_menu();
                 }
+                if ui.button("Cylindrical").clicked() {
+                    self.generator = Generator::Cylinder(2.0, 20.0, 20.0);
+                    ui.close_menu();
+                }
             });
 
             match self.generator {
@@ -152,6 +161,20 @@ impl eframe::App for App {
                     ui.horizontal(|ui| {
                         ui.label("Scaling");
                         ui.add(egui::Slider::new(scaling, 0.0..=5.0))
+                    });
+                }
+                Generator::Cylinder(ref mut scaling, ref mut radius, ref mut height) => {
+                    ui.horizontal(|ui| {
+                        ui.label("Scaling");
+                        ui.add(egui::Slider::new(scaling, 0.0..=5.0))
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Radius");
+                        ui.add(egui::Slider::new(radius, 0.0..=30.0))
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Height");
+                        ui.add(egui::Slider::new(height, 0.0..=60.0))
                     });
                 }
             }
