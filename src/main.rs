@@ -1,18 +1,21 @@
 use color_eyre::eyre::Result;
 use egui::{ColorImage, TextureHandle, Ui, Vec2};
 use image::{io::Reader as ImageReader, DynamicImage};
-use lith::gen::{flat_image::FlatImageGenerator, LithophaneGenerator};
-use std::path::PathBuf;
+use lith::gen::{
+    flat_mesh::FlatMeshGenerator, standard_image::StandardImagePreprocessor, ImagePreprocessor,
+    LithophaneGenerator,
+};
+use std::{path::PathBuf, fmt::Display};
 
 use eframe::egui;
 
 struct App {
     path: Option<PathBuf>,
-    scaling: f32,
-    width: usize,
     display_image: Option<TextureHandle>,
     dyn_image: Option<DynamicImage>,
     res: Option<Result<(), &'static str>>,
+    processor: Processor,
+    generator: Generator,
 }
 
 impl App {
@@ -28,22 +31,71 @@ impl App {
 
         Ok(())
     }
+
+    fn generate_lithophane(&mut self) {
+        let map = match self.processor {
+            Processor::Standard(width) => StandardImagePreprocessor::default()
+                .width(width)
+                .transform(self.dyn_image.as_ref().unwrap()),
+        };
+        let mesh = match self.generator {
+            Generator::FlatMesh(scaling) => {
+                FlatMeshGenerator::default().scaling(scaling).generate(map)
+            }
+        };
+
+        let r = std::fs::write(
+            self.path.as_ref().unwrap().with_extension("stl"),
+            mesh.as_stl_bytes(),
+        );
+
+        if let Err(err) = r {
+            println!("{:?}", err);
+            self.res = Some(Err("Please check the console for more information..."));
+        } else {
+            self.res = Some(Ok(()));
+        }
+    }
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             path: None,
-            scaling: 3.0,
-            width: 80,
             display_image: None,
             dyn_image: None,
             res: None,
+            processor: Processor::Standard(80),
+            generator: Generator::FlatMesh(2.0),
         }
     }
 }
 
 static FILE_FORMATS: &[&str] = &["png", "jpg", "jpeg", "bmp", "qoi", "tiff"];
+
+enum Processor {
+    Standard(usize),
+}
+
+impl Display for Processor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Processor::Standard(_) => "Standard"
+        })
+    }
+}
+
+enum Generator {
+    FlatMesh(f32),
+}
+
+impl Display for Generator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Generator::FlatMesh(_) => "Flat Mesh"
+        })
+    }
+}
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
@@ -72,15 +124,37 @@ impl eframe::App for App {
                 };
             });
 
-            ui.horizontal(|ui| {
-                ui.label("Scaling");
-                ui.add(egui::Slider::new(&mut self.scaling, 0.0..=5.0))
+            ui.menu_button(format!("Image Processor: {}", self.processor), |ui| {
+                if ui.button("Standard").clicked() {
+                    self.processor = Processor::Standard(80);
+                    ui.close_menu();
+                }
             });
 
-            ui.horizontal(|ui| {
-                ui.label("Width");
-                ui.add(egui::Slider::new(&mut self.width, 0..=480))
+            match self.processor {
+                Processor::Standard(ref mut width) => {
+                    ui.horizontal(|ui| {
+                        ui.label("Width");
+                        ui.add(egui::Slider::new(width, 0..=480))
+                    });
+                }
+            }
+
+            ui.menu_button(format!("Mesh Generator: {}", self.generator), |ui| {
+                if ui.button("Flat Mesh").clicked() {
+                    self.generator = Generator::FlatMesh(2.0);
+                    ui.close_menu();
+                }
             });
+
+            match self.generator {
+                Generator::FlatMesh(ref mut scaling) => {
+                    ui.horizontal(|ui| {
+                        ui.label("Scaling");
+                        ui.add(egui::Slider::new(scaling, 0.0..=5.0))
+                    });
+                }
+            }
 
             if let Some(ref texture) = self.display_image {
                 let s = texture.size();
@@ -92,22 +166,7 @@ impl eframe::App for App {
             if !self.dyn_image.is_none() {
                 ui.vertical_centered(|ui| {
                     if ui.button("Generate Lithophane").clicked() {
-                        let generator =
-                            FlatImageGenerator::from(self.dyn_image.as_ref().unwrap().clone())
-                                .width(self.width)
-                                .scaling(self.scaling);
-                        let mesh = generator.generate();
-                        let r = std::fs::write(
-                            self.path.as_ref().unwrap().with_extension("stl"),
-                            mesh.as_stl_bytes(),
-                        );
-                        if let Err(err) = r {
-                            println!("{:?}", err);
-                            self.res =
-                                Some(Err("Please check the console for more information..."));
-                        } else {
-                            self.res = Some(Ok(()));
-                        }
+                        self.generate_lithophane();
                     }
                 });
             }
@@ -126,7 +185,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 600.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 720.0]),
         ..Default::default()
     };
 
