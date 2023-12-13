@@ -20,14 +20,14 @@ impl CylinderMeshGenerator {
         self.scaling = -scaling;
         self
     }
-    
+
     /// Set the target height of the cylinder
     pub fn height(mut self, height: f32) -> Self {
         // the field `height` is used for the height of the source image
         self.size = height;
         self
     }
-    
+
     /// Set the target radius of the cylinder
     pub fn radius(mut self, radius: f32) -> Self {
         self.radius = radius;
@@ -73,7 +73,6 @@ impl CylinderMeshGenerator {
             z: -(y as f32 / self.height as f32) * self.size,
         }
     }
-
 
     /// Add a quad whose bottom-right vertex is at (x, y)
     fn add_quad(&mut self, x: usize, y: usize) {
@@ -129,7 +128,7 @@ impl LithophaneGenerator for CylinderMeshGenerator {
             let br = self.get_vertex(0, y);
             self.tris
                 .extend_from_slice(&[tl.clone(), bl, br.clone(), tl, br, tr]);
-            let tl = self.get_bottom_vertex(self.width -1, y - 1);
+            let tl = self.get_bottom_vertex(self.width - 1, y - 1);
             let bl = self.get_bottom_vertex(self.width - 1, y);
             let tr = self.get_bottom_vertex(0, y - 1);
             let br = self.get_bottom_vertex(0, y);

@@ -1,11 +1,12 @@
 use color_eyre::eyre::Result;
 use egui::{ColorImage, TextureHandle, Ui, Vec2};
-use image::{io::Reader as ImageReader, DynamicImage};
+use image::{imageops::FilterType, io::Reader as ImageReader, DynamicImage};
 use lith::gen::{
+    cylinder_mesh::CylinderMeshGenerator, filter_image::FilterImagePreprocessor,
     flat_mesh::FlatMeshGenerator, standard_image::StandardImagePreprocessor, ImagePreprocessor,
-    LithophaneGenerator, cylinder_mesh::CylinderMeshGenerator,
+    LithophaneGenerator,
 };
-use std::{path::PathBuf, fmt::Display};
+use std::{fmt::Display, path::PathBuf};
 
 use eframe::egui;
 
@@ -13,7 +14,7 @@ struct App {
     path: Option<PathBuf>,
     display_image: Option<TextureHandle>,
     dyn_image: Option<DynamicImage>,
-    res: Option<Result<(), &'static str>>,
+    res: Option<Result<usize, &'static str>>,
     processor: Processor,
     generator: Generator,
 }
@@ -37,14 +38,20 @@ impl App {
             Processor::Standard(width) => StandardImagePreprocessor::default()
                 .width(width)
                 .transform(self.dyn_image.as_ref().unwrap()),
+            Processor::Filter(width, filter) => FilterImagePreprocessor::default()
+                .width(width)
+                .filter(FILTER_TYPES[filter])
+                .transform(self.dyn_image.as_ref().unwrap()),
         };
         let mesh = match self.generator {
             Generator::FlatMesh(scaling) => {
                 FlatMeshGenerator::default().scaling(scaling).generate(map)
             }
-            Generator::Cylinder(scaling, radius, height) => {
-                CylinderMeshGenerator::default().scaling(scaling).radius(radius).height(height).generate(map)
-            }
+            Generator::Cylinder(scaling, radius, height) => CylinderMeshGenerator::default()
+                .scaling(scaling)
+                .radius(radius)
+                .height(height)
+                .generate(map),
         };
 
         let r = std::fs::write(
@@ -56,7 +63,7 @@ impl App {
             println!("{:?}", err);
             self.res = Some(Err("Please check the console for more information..."));
         } else {
-            self.res = Some(Ok(()));
+            self.res = Some(Ok(10));
         }
     }
 }
@@ -75,16 +82,36 @@ impl Default for App {
 }
 
 static FILE_FORMATS: &[&str] = &["png", "jpg", "jpeg", "bmp", "qoi", "tiff"];
+static FILTER_TYPES: &[FilterType] = &[
+    FilterType::Nearest,
+    FilterType::Triangle,
+    FilterType::Gaussian,
+    FilterType::CatmullRom,
+    FilterType::Lanczos3,
+];
+static FILTER_NAMES: &[&str] = &[
+    "Nearest Neighbor",
+    "Linear",
+    "Gaussian",
+    "Bicubic",
+    "Lanczos",
+];
 
 enum Processor {
     Standard(usize),
+    Filter(usize, usize),
 }
 
 impl Display for Processor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Processor::Standard(_) => "Standard"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Processor::Standard(_) => "Standard",
+                Processor::Filter(_, _) => "Filtered",
+            }
+        )
     }
 }
 
@@ -95,10 +122,14 @@ enum Generator {
 
 impl Display for Generator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Generator::FlatMesh(_) => "Flat Mesh",
-            Generator::Cylinder(_, _, _) => "Cylindrical",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Generator::FlatMesh(_) => "Flat Mesh",
+                Generator::Cylinder(_, _, _) => "Cylindrical",
+            }
+        )
     }
 }
 
@@ -134,13 +165,31 @@ impl eframe::App for App {
                     self.processor = Processor::Standard(80);
                     ui.close_menu();
                 }
+                if ui.button("Filtered").clicked() {
+                    self.processor = Processor::Filter(80, 3);
+                    ui.close_menu();
+                }
             });
 
             match self.processor {
                 Processor::Standard(ref mut width) => {
                     ui.horizontal(|ui| {
                         ui.label("Width");
-                        ui.add(egui::Slider::new(width, 0..=480))
+                        ui.add(egui::Slider::new(width, 20..=720))
+                    });
+                }
+                Processor::Filter(ref mut width, ref mut filter) => {
+                    ui.horizontal(|ui| {
+                        ui.label("Width");
+                        ui.add(egui::Slider::new(width, 20..=720))
+                    });
+                    ui.menu_button(format!("Filter: {}", FILTER_NAMES[*filter]), |ui| {
+                        for (i, name) in FILTER_NAMES.iter().enumerate() {
+                            if ui.button(*name).clicked() {
+                                *filter = i;
+                                ui.close_menu();
+                            }
+                        }
                     });
                 }
             }
@@ -170,11 +219,11 @@ impl eframe::App for App {
                     });
                     ui.horizontal(|ui| {
                         ui.label("Radius");
-                        ui.add(egui::Slider::new(radius, 0.0..=30.0))
+                        ui.add(egui::Slider::new(radius, 0.0..=50.0))
                     });
                     ui.horizontal(|ui| {
                         ui.label("Height");
-                        ui.add(egui::Slider::new(height, 0.0..=60.0))
+                        ui.add(egui::Slider::new(height, 0.0..=100.0))
                     });
                 }
             }
@@ -189,15 +238,25 @@ impl eframe::App for App {
             if !self.dyn_image.is_none() {
                 ui.vertical_centered(|ui| {
                     if ui.button("Generate Lithophane").clicked() {
+                        self.res = None;
                         self.generate_lithophane();
                     }
                 });
             }
 
-            if let Some(res) = self.res {
+            if let Some(ref mut res) = self.res {
                 match res {
-                    Ok(_) => ui.label("Lithophane successfully generated..."),
-                    Err(msg) => ui.label(&format!("ERROR: {msg}")),
+                    Ok(ref mut countdown) => {
+                        if *countdown > 0 {
+                            *countdown -= 1;
+                            ui.ctx().request_repaint();
+                        } else {
+                            ui.label("Lithophane successfully generated...");
+                        }
+                    }
+                    Err(msg) => {
+                        ui.label(&format!("ERROR: {msg}"));
+                    }
                 };
             }
         });
