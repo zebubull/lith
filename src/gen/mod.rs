@@ -4,6 +4,8 @@ use crate::geo::Mesh;
 
 /// Cylindrical lithophane generator
 pub mod cylinder_mesh;
+/// Image preprocessor with user-specified filter
+pub mod filter_image;
 /// Flat image lithophane generator
 pub mod flat_mesh;
 /// Standard image preprocessor
