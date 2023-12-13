@@ -63,7 +63,7 @@ impl CylinderMeshGenerator {
         }
     }
 
-    fn get_bottom_vertex(&self, x: usize, y: usize) -> Vec3 {
+    fn get_interior_vertex(&self, x: usize, y: usize) -> Vec3 {
         let angle = (x as f32 / self.width as f32) * 2.0 * std::f32::consts::PI;
         let (sin, cos) = angle.sin_cos();
         let radius = self.radius + self.bottom;
@@ -86,12 +86,59 @@ impl CylinderMeshGenerator {
     }
 
     fn add_interior_quad(&mut self, x: usize, y: usize) {
-        let tl = self.get_bottom_vertex(x - 1, y - 1);
-        let bl = self.get_bottom_vertex(x - 1, y);
-        let tr = self.get_bottom_vertex(x, y - 1);
-        let br = self.get_bottom_vertex(x, y);
+        let tl = self.get_interior_vertex(x - 1, y - 1);
+        let bl = self.get_interior_vertex(x - 1, y);
+        let tr = self.get_interior_vertex(x, y - 1);
+        let br = self.get_interior_vertex(x, y);
         self.tris
             .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl])
+    }
+
+    fn bridge_edge_loop(&mut self, y: usize) {
+            let tl = self.get_vertex(self.width - 1, y - 1);
+            let bl = self.get_vertex(self.width - 1, y);
+            let tr = self.get_vertex(0, y - 1);
+            let br = self.get_vertex(0, y);
+            self.tris
+                .extend_from_slice(&[tl.clone(), bl, br.clone(), tl, br, tr]);
+            let tl = self.get_interior_vertex(self.width -1, y - 1);
+            let bl = self.get_interior_vertex(self.width - 1, y);
+            let tr = self.get_interior_vertex(0, y - 1);
+            let br = self.get_interior_vertex(0, y);
+            self.tris
+                .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
+    }
+
+    fn bridge_int_ext(&mut self, x: usize) {
+        let tl = self.get_interior_vertex(x - 1, self.height - 1);
+        let bl = self.get_vertex(x - 1, self.height - 1);
+        let tr = self.get_interior_vertex(x, self.height - 1);
+        let br = self.get_vertex(x, self.height - 1);
+        self.tris
+            .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
+        
+        let tl = self.get_vertex(x - 1, 0);
+        let bl = self.get_interior_vertex(x - 1, 0);
+        let tr = self.get_vertex(x, 0);
+        let br = self.get_interior_vertex(x, 0);
+        self.tris
+            .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
+    }
+
+    fn bridge_int_ext_loop(&mut self) {
+        let tl = self.get_interior_vertex(self.width - 1, self.height - 1);
+        let bl = self.get_vertex(self.width - 1, self.height - 1);
+        let tr = self.get_interior_vertex(0, self.height - 1);
+        let br = self.get_vertex(0, self.height - 1);
+        self.tris
+            .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
+        
+        let tl = self.get_vertex(self.width - 1, 0);
+        let bl = self.get_interior_vertex(self.width - 1, 0);
+        let tr = self.get_vertex(0, 0);
+        let br = self.get_interior_vertex(0, 0);
+        self.tris
+            .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
     }
 }
 
@@ -122,20 +169,15 @@ impl LithophaneGenerator for CylinderMeshGenerator {
                 self.add_quad(x, y);
                 self.add_interior_quad(x, y);
             }
-
-            let tl = self.get_vertex(self.width - 1, y - 1);
-            let bl = self.get_vertex(self.width - 1, y);
-            let tr = self.get_vertex(0, y - 1);
-            let br = self.get_vertex(0, y);
-            self.tris
-                .extend_from_slice(&[tl.clone(), bl, br.clone(), tl, br, tr]);
-            let tl = self.get_bottom_vertex(self.width -1, y - 1);
-            let bl = self.get_bottom_vertex(self.width - 1, y);
-            let tr = self.get_bottom_vertex(0, y - 1);
-            let br = self.get_bottom_vertex(0, y);
-            self.tris
-                .extend_from_slice(&[br.clone(), bl, tl.clone(), tr, br, tl]);
+    
+            self.bridge_edge_loop(y);
         }
+
+        for x in 1..width {
+            self.bridge_int_ext(x);
+        }
+
+        self.bridge_int_ext_loop();
 
         Mesh::new(self.tris)
     }
